@@ -1,16 +1,22 @@
-#include <EEPROM.h>
+#include <EEPROM.h> 
+//Encoder pins
 #define ENCA 2 
 #define ENCB 3 
-
+//Motor pins
 #define PWM 10
 #define IN1 8
 #define IN2 9
+//Joystick Pins
+#define JOYSTICK A0
 
-#define CPR 9360
-#define FACTOR 6.5     
+#define CPR 9360      //Counts Per Revolution 
+#define PPR 9360/4    //Pulse Per Revolution
+#define FACTOR 6.5    //Factor which is used to convert position from degree to PPR 
 
-float pos;
-int deg2;
+
+int deg ; //Target position in degree
+long pos; //Current position in pulses
+
 long prevT = 0;
 float eprev = 0;
 float eintegral = 0;
@@ -20,51 +26,45 @@ float kp = 1;
 float ki = 0;
 float kd = 0.09;
 
-unsigned long previousMillis = 0;        // Store the last time the value was checked
-const long interval = 100;             // Time interval in milliseconds (5 seconds here)
-int variableToCheck = 0;                // The variable to monitor
-int lastValue = -1;                     // Store the previous value for comparison
-
 void setup() {
+
   Serial.begin(9600);
-  pos=map(EEPROM.read(0),0,255,0,360) * FACTOR;
-  Serial.println("     ");
-  Serial.print("POS=  ");
+
+  //Read the previous position of the motor shaft from the EEPROM memory so that the reference position do not change (Absolute Servo)
+  pos=map(EEPROM.read(0),0,255,0,360) * FACTOR; 
+  Serial.println(" ");
+  Serial.print("CURRENT POSITION =  ");
   Serial.println(pos/FACTOR);  
+  deg=pos/FACTOR;
   pinMode(ENCA,INPUT);
   pinMode(ENCB,INPUT);
-  pinMode(POT, INPUT);
+
   attachInterrupt(digitalPinToInterrupt(ENCA),readEncoder,RISING);
 }
 
 void loop() {
   
-  PID(map(analogRead(A0),0,1023,0,360));
-
-
-  /*
-  while(Serial.available()!=0){
-
-    deg2=Serial.parseInt();
-    Serial.print("ANGLE=   ");
-    Serial.println(deg2);
-    if(deg2!=0){
-      PID(deg2);
-      delay(2000);
-      Serial.println("Returned");
-    }
+  //Function for Clockwise Rotation
+  if(analogRead(JOYSTICK)>800){ 
+    deg+=10;    
   }
-  Serial.print("Waiting ");
-  Serial.println(deg2);
-  */
+  //Function for Anti-Clockwise Rotation
+  else if(analogRead(JOYSTICK)<300){
+    deg-=10;        
+  }
+  //Upper limit = 360 degree
+  if(deg>360)
+    deg=360;
+  //Lower limit =  0  degree
+  if(deg<0)
+    deg=0;
 
-  //int deg=map(analogRead(POT),0,1023,0,360);
-
-
+  PID(deg);  //PID Function
 
 }
 
 void setMotor(int dir, int pwmVal, int pwm, int in1, int in2){
+
   analogWrite(pwm,pwmVal);
   if(dir == 1){
     digitalWrite(in1,HIGH);
@@ -78,9 +78,11 @@ void setMotor(int dir, int pwmVal, int pwm, int in1, int in2){
     digitalWrite(in1,LOW);
     digitalWrite(in2,LOW);
   }  
+
 }
 
 void readEncoder(){
+
   int b = digitalRead(ENCB);
   if(b > 0){
     pos++;
@@ -88,11 +90,12 @@ void readEncoder(){
   else{
     pos--;
   }
+
 }
 
 int PID(int deg){
+  //target position in terms of pulses
   float target = deg*FACTOR;  
-  
 
   // time difference
   long currT = micros();
@@ -111,8 +114,7 @@ int PID(int deg){
   // control signal
   float u = kp*e + kd*dedt + ki*eintegral;
 
-
-  // motor power
+  // motor speed limiting
   float pwr = fabs(u);
   if( pwr > 255 ){
     pwr = 255;
@@ -124,39 +126,19 @@ int PID(int deg){
     dir = -1;
   }
 
-
-  // signal the motor
+  // Sending signal to the motor
   setMotor(dir,pwr,PWM,IN1,IN2);
 
   // store previous error
   eprev = e;
-  //Serial.print("Target: ");
-
-  Serial.print(target/FACTOR);
-  Serial.print(" ");
-  //Serial.print("Position: ");
-  Serial.print(pos/FACTOR);
+  Serial.print("Target Angle = ");
+  Serial.print(target/FACTOR); //Printing target position in degrees
+  Serial.print("  ");
+  Serial.print("Current Angle = ");
+  Serial.print(pos/FACTOR);    //Printing current position in degrees
   Serial.println();
-  EEPROM.update(0, map(pos/FACTOR,0,360,0,255));
-  //Serial.print("EEPROM STORED=  ");
-  //Serial.println(map(EEPROM.read(0),0,255,0,360));
-  //Serial.println("DONE......................");
+
+  EEPROM.update(0, map(pos/FACTOR,0,360,0,255)); //Store current position in EEPROM for reference incase of reset or power-off
 
 }
 
-int constant_check(){
-  unsigned long currentMillis = millis();  // Get the current time
-
-  if (currentMillis - previousMillis >= interval) {  
-    previousMillis = currentMillis;
-    int currentValue = pos; //pos
-    if (currentValue == lastValue) {    
-      return 1;     
-      
-    } 
-    lastValue = currentValue;
-    return 0;
-    //Serial.println("Value has changed");  
-  } 
-
-}
