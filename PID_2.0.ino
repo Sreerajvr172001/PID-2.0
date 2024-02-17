@@ -8,7 +8,6 @@
 
 #define CPR 9360
 #define FACTOR 6.5     
-#define POT A0
 
 float pos;
 int deg2;
